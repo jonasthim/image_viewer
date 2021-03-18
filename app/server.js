@@ -13,13 +13,13 @@ app.set("view engine", "ejs");
 // Middlewares
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(cookieSession({secret:"somesecrettokenhere"}));
+app.use(cookieSession({secret:"${process.env.SECRET}"}));
 app.use(passport.initialize());
 app.use(express.static("./public"));
 
 passport.use(new twitchStrategy({
-    clientID: "098f6bcd4621d373cade4e832627b4f6",
-    clientSecret: "4eb20288afaed97e82bde371260db8d8",
+    clientID: "${process.env.CLIENT_ID}",
+    clientSecret: "${process.env.CLIENT_SECRET}",
     callbackURL: "http://127.0.0.1:3000/auth/twitch/callback",
     scope: "user_read"
   },
