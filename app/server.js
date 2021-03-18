@@ -43,6 +43,10 @@ app.get("/", function (req, res) {
     res.render("index");
 });
 
+app.get("/meme", function (req, res) {
+    res.render("meme");
+});
+
 app.get("/auth/twitch", passport.authenticate("twitch"));
 app.get("/auth/twitch/callback", passport.authenticate("twitch", { failureRedirect: "/" }), function(req, res) {
     // Successful authentication, redirect home.
