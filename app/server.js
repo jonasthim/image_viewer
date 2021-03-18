@@ -49,4 +49,4 @@ app.get("/auth/twitch/callback", passport.authenticate("twitch", { failureRedire
     res.redirect("/");
 });
 
-app.listen(8080);
+app.listen(3000);
