@@ -1,6 +1,6 @@
 FROM node
 COPY ./app /app
-RUN mdkir -p /app/uploads
+RUN mkdir -p /app/uploads
 WORKDIR /app
 RUN npm install
 EXPOSE 3000
