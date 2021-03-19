@@ -31,7 +31,7 @@ imageTimer = 0;
 
 observer.watchFolder(uploadsFolder);
 
-const TIME_TO_DISPLAY = 2000;
+const TIME_TO_DISPLAY = 10000;
 const emitFile = new rxjs.Subject();
 const queueUpdate = new rxjs.Subject();
 
@@ -40,16 +40,13 @@ queueUpdate.subscribe(() => {
     const queueDisplayImageTimer = rxjs.timer(TIME_TO_DISPLAY);
 
     queueWaitTimer.subscribe((val) => {
-        console.log("START DISPLAY");
         emitFile.next(fileQueue[0]);
 
         queueDisplayImageTimer.subscribe(() => {
             fileQueue.splice(0, 1);
             if(fileQueue.length > 0) {
-                console.log(fileQueue.length, "DISPLAY NEXT");
                 emitFile.next(fileQueue[0]);
             } else {
-                console.log("DISPLAY EMPTY");
                 emitFile.next(emptyImg);
             }
         });
@@ -63,6 +60,8 @@ observer.on('file-added', file => {
 });
 
 io.on('connection', function(socket) {
+    const currentImg = fileQueue[0] || emptyImg;
+    socket.emit('image', currentImg);
     emitFile.subscribe((file) => {
         socket.emit('image', file);
     });
@@ -120,19 +119,12 @@ passport.use('twitch', new OAuth2Strategy({
     clientSecret: TWITCH_SECRET,
     callbackURL: CALLBACK_URL,
     state: true
-},
-function(accessToken, refreshToken, profile, done) {
+}, function(accessToken, refreshToken, profile, done) {
     profile.accessToken = accessToken;
     profile.refreshToken = refreshToken;
 
-// Securely store user profile in your DB
-//User.findOrCreate(..., function(err, user) {
-//  done(err, user);
-//});
-
-done(null, profile);
-}
-));
+    done(null, profile);
+}));
 
 // Set route to start OAuth link, this is where you define scopes to request
 app.get('/auth/twitch', passport.authenticate('twitch', { scope: 'user_read' }));
@@ -223,92 +215,37 @@ app.post('/upload', function(req, res) {
   sampleFile.mv(uploadPath, function(err) {
       if (err)
           return res.status(500).send(err);
-      res.sendStatus(200)
-    //res.redirect("/meme");
+    res.redirect("/");
 });
 });
-
-var memeTemplate = handlebars.compile(`
-    <html>
-    <head>
-    <title>Meme for the pajk</title>
-    <style>
-    body {
-        max-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    img {
-        max-height: 100%;
-    }
-    </style>
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-    var socket = io.connect('/');
-    </script>
-    </head>
-    <body>
-    <script type="text/javascript">
-    setTimeout(() => {
-        location.reload();
-    }, {{timer}})
-    </script>
-    {{#if src}}
-    <img src="data:image/png;base64, {{src}}" />
-    {{/if}}
-    </body>
-    </html>
-    `);
-
-
-
-app.get('/meme', function (req, res) {
-
-    if (latestFileDir) {
-        let bitmap = fs.readFileSync(latestFileDir);
-        base64Img = Buffer.from(bitmap).toString('base64');
-        timer = 20000;
-        bitmap = null;
-        setTimeout(() => {
-            fs.unlinkSync(latestFileDir);
-            latestFileDir = null;
-        }, timer)
-    }
-
-    res.send(memeTemplate({src: base64Img, timer}));
-});
-
-
 
 app.get('/', function(req, res){
     res.send(`
         <html>
-        <head>
-        <title>Meme for the pajk</title>
-        <style>
-        body {
-            max-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        img {
-            max-height: 100%;
-        }
-        </style>
-        <script src="/socket.io/socket.io.js"></script>
-        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-        </head>
-        <body>
-        <img id="base64image" src="data:image/jpeg;base64, iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" />
-        <script>
-        var socket = io.connect('/');
-        socket.on('image', function(data) {
-            $("#base64image").attr("src", "data:image/jpeg;base64,"+data);
-        });
-        </script>
-        </body>
+            <head>
+                <title>Meme for the pajk</title>
+                <style>
+                    body {
+                        max-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    img {
+                        max-height: 100%;
+                    }
+                </style>
+                <script src="/socket.io/socket.io.js"></script>
+            </head>
+            <body>
+                <img id="base64image" src="data:image/jpeg;base64, iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" />
+                <script>
+                    var socket = io.connect('/');
+                    socket.on('image', function(data) {
+                        document.querySelector("#base64image").src = "data:image/jpeg;base64,"+data;
+                    });
+                </script>
+            </body>
         </html>
         `);
 });
