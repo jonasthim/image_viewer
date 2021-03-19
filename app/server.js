@@ -8,6 +8,7 @@ or in the "license" file accompanying this file. This file is distributed on an 
 
 // Define our dependencies
 var express        = require('express');
+var app            = express();
 var session        = require('express-session');
 var passport       = require('passport');
 var OAuth2Strategy = require('passport-oauth').OAuth2Strategy;
@@ -15,6 +16,45 @@ var request        = require('request');
 var handlebars     = require('handlebars');
 var fileUpload     = require('express-fileupload');
 var fs             = require('fs');
+const Observer     = require('./services/observer');
+var http           = require('http').createServer(app);
+var io             = require('socket.io')(http);
+
+var observer = new Observer();
+
+const uploadsFolder = __dirname+"/uploads/";
+
+const fileArray = ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="]
+
+observer.watchFolder(uploadsFolder);
+
+imageTimer = 0;
+
+io.on('connection', function(socket) {
+  observer.on('file-added', file => {
+    console.log(imageTimer)
+    // print error message to console
+    fileArray.push(file.content);
+
+    setTimeout(function(){
+      socket.emit('image', fileArray);
+    }, imageTimer);
+    imageTimer = imageTimer - 20000;
+    
+
+    setTimeout(function(){
+      const index = fileArray.indexOf(file.content);
+      if (index > -1) {
+        fileArray.splice(index, 1);
+      }
+      socket.emit('image', fileArray);
+    }, imageTimer + 20000);
+
+  });
+
+
+});
+
 
 // Define our constants, you will change these with your own
 const TWITCH_CLIENT_ID = process.env.CLIENT_ID;
@@ -23,7 +63,7 @@ const SESSION_SECRET   = process.env.SECRET;
 const CALLBACK_URL     = `${process.env.CALLBACK_URI_BASE}/auth/twitch/callback`;  // You can run locally with - http://localhost:3000/auth/twitch/callback
 
 // Initialize Express and middlewares
-var app = express();
+
 app.use(session({secret: SESSION_SECRET, resave: false, saveUninitialized: false}));
 app.use(express.static('public'));
 app.use(passport.initialize());
@@ -129,6 +169,7 @@ const acceptedUsers = process.env.ACCEPTED_USERS.split(" ");
 // If user has an authenticated session, display it, otherwise display link to authenticate
 app.get('/upload', function (req, res) {
     if(req.session && req.session.passport && req.session.passport.user) {
+        console.log(req.session.passport.user)
         let isAccepted = false;
         req.session.passport.user.data.forEach(userData => {
             if(!isAccepted) {
@@ -163,14 +204,14 @@ app.post('/upload', function(req, res) {
 
   // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
   sampleFile = req.files.sampleFile;
-  uploadPath = `${__dirname}/uploads/${new Date().getTime()}_${sampleFile.name}`;
+  uploadPath = `${uploadsFolder}${new Date().getTime()}_${sampleFile.name}`;
 
   // Use the mv() method to place the file somewhere on your server
   sampleFile.mv(uploadPath, function(err) {
     if (err)
       return res.status(500).send(err);
-
-    res.redirect("/meme");
+    res.sendStatus(200)
+    //res.redirect("/meme");
   });
 });
 
@@ -189,6 +230,10 @@ var memeTemplate = handlebars.compile(`
                     max-height: 100%;
                 }
             </style>
+            <script src="/socket.io/socket.io.js"></script>
+            <script>
+                var socket = io.connect('/');
+            </script>
         </head>
         <body>
             <script type="text/javascript">
@@ -203,16 +248,10 @@ var memeTemplate = handlebars.compile(`
     </html>
 `);
 
-let latestFileDir = null;
-fs.watch(`${__dirname}/uploads/`, (eventType, filename) => {
-    console.log(eventType);
-    console.log(filename);
-    latestFileDir = `${__dirname}/uploads/${filename}`;
-});
+
 
 app.get('/meme', function (req, res) {
-    let base64Img;
-    let timer = 2000;
+
     if (latestFileDir) {
         let bitmap = fs.readFileSync(latestFileDir);
         base64Img = Buffer.from(bitmap).toString('base64');
@@ -227,6 +266,40 @@ app.get('/meme', function (req, res) {
     res.send(memeTemplate({src: base64Img, timer}));
 });
 
-app.listen(3000, function () {
+
+
+app.get('/', function(req, res){
+    res.send(`
+            <html>
+                <head>
+                    <title>Meme for the pajk</title>
+                    <style>
+                        body {
+                            max-height: 100vh;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+                        img {
+                            max-height: 100%;
+                        }
+                    </style>
+                    <script src="/socket.io/socket.io.js"></script>
+                    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+                </head>
+                <body>
+                    <img id="base64image" src="data:image/jpeg;base64, iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" />
+                    <script>
+                        var socket = io.connect('/');
+                        socket.on('image', function(data) {
+                          $("#base64image").attr("src", "data:image/jpeg;base64,"+data[data.length -1]);
+                        });
+                    </script>
+                </body>
+            </html>
+        `);
+});
+
+http.listen(3000, function () {
     console.log('Twitch auth sample listening on port 3000!')
 });
